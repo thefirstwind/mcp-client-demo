@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息卡片 - MCP Client Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card-header {
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+        .card-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+        }
+        .card-item {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .card-item:last-child {
+            border-bottom: none;
+        }
+        .product-image {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            margin-right: 10px;
+            border-radius: 4px;
+        }
+        .tracking-progress {
+            height: 8px;
+            margin: 15px 0;
+        }
+        .courier-logo {
+            width: 60px;
+            height: 30px;
+            object-fit: contain;
+            margin-right: 10px;
+        }
+        .tracking-detail {
+            position: relative;
+            padding-left: 30px;
+            margin-bottom: 15px;
+        }
+        .tracking-detail:before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ccc;
+        }
+        .tracking-detail.current:before {
+            background-color: #198754;
+        }
+        .tracking-detail:after {
+            content: '';
+            position: absolute;
+            left: 14px;
+            top: 10px;
+            width: 2px;
+            height: calc(100% + 5px);
+            background-color: #ddd;
+        }
+        .tracking-detail:last-child:after {
+            display: none;
+        }
+        .badge-status {
+            font-size: 0.8rem;
+            padding: 0.35em 0.65em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>消息卡片</h1>
+            <div>
+                <a href="/" class="btn btn-outline-primary me-2">返回聊天</a>
+                <button id="initCardsBtn" class="btn btn-primary">初始化示例卡片</button>
+            </div>
+        </div>
+        
+        <div class="row" id="cardsContainer">
+            <!-- 卡片将通过JavaScript动态加载 -->
+        </div>
+    </div>
+
+    <!-- 订单卡片模板 -->
+    <template id="orderCardTemplate">
+        <div class="col-md-4">
+            <div class="card order-card">
+                <div class="card-header bg-primary text-white">
+                    <img src="" class="card-icon" alt="订单图标">
+                    <span class="card-title"></span>
+                </div>
+                <div class="card-body">
+                    <p class="card-description"></p>
+                    <div class="card-details">
+                        <div class="mb-3">
+                            <strong>订单编号：</strong> <span class="order-number"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>订单状态：</strong> <span class="order-status"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>下单时间：</strong> <span class="order-time"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>订单金额：</strong> <span class="order-amount"></span>
+                        </div>
+                        <hr>
+                        <h6>订单商品</h6>
+                        <div class="order-items">
+                            <!-- 商品项将被动态添加 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">创建于 <span class="created-time"></span></small>
+                    <a href="#" class="card-link stretched-link"></a>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 物流卡片模板 -->
+    <template id="logisticsCardTemplate">
+        <div class="col-md-4">
+            <div class="card logistics-card">
+                <div class="card-header bg-info text-white">
+                    <img src="" class="card-icon" alt="物流图标">
+                    <span class="card-title"></span>
+                </div>
+                <div class="card-body">
+                    <p class="card-description"></p>
+                    <div class="card-details">
+                        <div class="d-flex align-items-center mb-3">
+                            <img src="" class="courier-logo" alt="快递公司">
+                            <span class="courier-company"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>订单编号：</strong> <span class="order-number"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>物流单号：</strong> <span class="tracking-number"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>物流状态：</strong> <span class="logistics-status"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>最新进展：</strong> <span class="latest-update"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>预计送达：</strong> <span class="estimated-delivery"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">创建于 <span class="created-time"></span></small>
+                    <a href="#" class="card-link stretched-link"></a>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 物流追踪卡片模板 -->
+    <template id="trackingCardTemplate">
+        <div class="col-md-4">
+            <div class="card tracking-card">
+                <div class="card-header bg-success text-white">
+                    <img src="" class="card-icon" alt="追踪图标">
+                    <span class="card-title"></span>
+                </div>
+                <div class="card-body">
+                    <p class="card-description"></p>
+                    <div class="card-details">
+                        <div class="d-flex align-items-center mb-3">
+                            <img src="" class="courier-logo" alt="快递公司">
+                            <span class="courier-company"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>订单编号：</strong> <span class="order-number"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>物流单号：</strong> <span class="tracking-number"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>发货地：</strong> <span class="origin-location"></span>
+                        </div>
+                        <div class="mb-3">
+                            <strong>目的地：</strong> <span class="destination-location"></span>
+                        </div>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between">
+                                <small>配送进度</small>
+                                <small class="completion-percentage"></small>
+                            </div>
+                            <div class="progress tracking-progress">
+                                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <hr>
+                        <h6>物流追踪记录</h6>
+                        <div class="tracking-details">
+                            <!-- 追踪记录将被动态添加 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <small class="text-muted">创建于 <span class="created-time"></span></small>
+                    <a href="#" class="card-link stretched-link"></a>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const cardsContainer = document.getElementById('cardsContainer');
+            const initCardsBtn = document.getElementById('initCardsBtn');
+            
+            // 加载所有卡片
+            loadCards();
+            
+            // 初始化卡片按钮点击事件
+            initCardsBtn.addEventListener('click', function() {
+                fetch('/api/cards/init', { method: 'POST' })
+                    .then(response => response.text())
+                    .then(() => {
+                        loadCards();
+                    })
+                    .catch(error => {
+                        console.error('Error initializing cards:', error);
+                    });
+            });
+            
+            // 加载卡片
+            function loadCards() {
+                fetch('/api/cards')
+                    .then(response => response.json())
+                    .then(cards => {
+                        cardsContainer.innerHTML = '';
+                        cards.forEach(card => {
+                            let cardElement;
+                            
+                            switch(card.type) {
+                                case 'order':
+                                    cardElement = createOrderCard(card);
+                                    break;
+                                case 'logistics':
+                                    cardElement = createLogisticsCard(card);
+                                    break;
+                                case 'tracking':
+                                    cardElement = createTrackingCard(card);
+                                    break;
+                                default:
+                                    console.error('Unknown card type:', card.type);
+                                    return;
+                            }
+                            
+                            cardsContainer.appendChild(cardElement);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Error loading cards:', error);
+                    });
+            }
+            
+            // 创建订单卡片
+            function createOrderCard(card) {
+                const template = document.getElementById('orderCardTemplate');
+                const clone = document.importNode(template.content, true);
+                
+                // 填充基本信息
+                clone.querySelector('.card-icon').src = card.iconUrl || '/images/order-icon.png';
+                clone.querySelector('.card-title').textContent = card.title;
+                clone.querySelector('.card-description').textContent = card.description;
+                clone.querySelector('.created-time').textContent = formatDateTime(card.createdTime);
+                clone.querySelector('.card-link').href = card.actionUrl || '#';
+                
+                // 填充订单特有信息
+                clone.querySelector('.order-number').textContent = card.orderNumber;
+                clone.querySelector('.order-status').textContent = card.orderStatus;
+                clone.querySelector('.order-time').textContent = formatDateTime(card.orderTime);
+                clone.querySelector('.order-amount').textContent = formatPrice(card.totalAmount);
+                
+                // 填充订单商品
+                const itemsContainer = clone.querySelector('.order-items');
+                if (card.items && card.items.length > 0) {
+                    card.items.forEach(item => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'card-item d-flex align-items-center';
+                        itemDiv.innerHTML = `
+                            <img src="${item.imageUrl || '/images/product-default.jpg'}" class="product-image" alt="${item.productName}">
+                            <div>
+                                <div>${item.productName}</div>
+                                <div><small class="text-muted">${formatPrice(item.price)} × ${item.quantity}</small></div>
+                            </div>
+                        `;
+                        itemsContainer.appendChild(itemDiv);
+                    });
+                } else {
+                    itemsContainer.innerHTML = '<p class="text-muted">无商品信息</p>';
+                }
+                
+                return clone;
+            }
+            
+            // 创建物流卡片
+            function createLogisticsCard(card) {
+                const template = document.getElementById('logisticsCardTemplate');
+                const clone = document.importNode(template.content, true);
+                
+                // 填充基本信息
+                clone.querySelector('.card-icon').src = card.iconUrl || '/images/logistics-icon.png';
+                clone.querySelector('.card-title').textContent = card.title;
+                clone.querySelector('.card-description').textContent = card.description;
+                clone.querySelector('.created-time').textContent = formatDateTime(card.createdTime);
+                clone.querySelector('.card-link').href = card.actionUrl || '#';
+                
+                // 填充物流特有信息
+                clone.querySelector('.courier-logo').src = card.courierLogo || '/images/courier-default.png';
+                clone.querySelector('.courier-company').textContent = card.courierCompany;
+                clone.querySelector('.order-number').textContent = card.orderNumber;
+                clone.querySelector('.tracking-number').textContent = card.trackingNumber;
+                
+                // 根据状态设置不同的标签样式
+                const statusElement = clone.querySelector('.logistics-status');
+                statusElement.textContent = card.status;
+                
+                // 添加状态标签
+                let badgeClass = 'bg-secondary';
+                if (card.status === '已发出' || card.status === '已揽收') {
+                    badgeClass = 'bg-info';
+                } else if (card.status === '运输中') {
+                    badgeClass = 'bg-primary';
+                } else if (card.status === '派送中') {
+                    badgeClass = 'bg-warning text-dark';
+                } else if (card.status === '已签收') {
+                    badgeClass = 'bg-success';
+                }
+                
+                statusElement.className = `badge ${badgeClass} badge-status`;
+                
+                clone.querySelector('.latest-update').textContent = card.latestUpdate;
+                clone.querySelector('.estimated-delivery').textContent = formatDateTime(card.estimatedDeliveryTime);
+                
+                return clone;
+            }
+            
+            // 创建物流追踪卡片
+            function createTrackingCard(card) {
+                const template = document.getElementById('trackingCardTemplate');
+                const clone = document.importNode(template.content, true);
+                
+                // 填充基本信息
+                clone.querySelector('.card-icon').src = card.iconUrl || '/images/tracking-icon.png';
+                clone.querySelector('.card-title').textContent = card.title;
+                clone.querySelector('.card-description').textContent = card.description;
+                clone.querySelector('.created-time').textContent = formatDateTime(card.createdTime);
+                clone.querySelector('.card-link').href = card.actionUrl || '#';
+                
+                // 填充物流追踪特有信息
+                clone.querySelector('.courier-logo').src = card.courierLogo || '/images/courier-default.png';
+                clone.querySelector('.courier-company').textContent = card.courierCompany;
+                clone.querySelector('.order-number').textContent = card.orderNumber;
+                clone.querySelector('.tracking-number').textContent = card.trackingNumber;
+                clone.querySelector('.origin-location').textContent = card.originLocation;
+                clone.querySelector('.destination-location').textContent = card.destinationLocation;
+                
+                // 进度条
+                const percentage = card.completionPercentage || 0;
+                clone.querySelector('.completion-percentage').textContent = `${percentage}%`;
+                clone.querySelector('.progress-bar').style.width = `${percentage}%`;
+                
+                // 填充追踪记录
+                const detailsContainer = clone.querySelector('.tracking-details');
+                if (card.trackingDetails && card.trackingDetails.length > 0) {
+                    card.trackingDetails.forEach(detail => {
+                        const detailDiv = document.createElement('div');
+                        detailDiv.className = `tracking-detail${detail.current ? ' current' : ''}`;
+                        detailDiv.innerHTML = `
+                            <div class="d-flex justify-content-between">
+                                <strong>${detail.status}</strong>
+                                <small class="text-muted">${formatDateTime(detail.timestamp)}</small>
+                            </div>
+                            <div>${detail.description}</div>
+                            <div><small class="text-muted">${detail.location}</small></div>
+                        `;
+                        detailsContainer.appendChild(detailDiv);
+                    });
+                } else {
+                    detailsContainer.innerHTML = '<p class="text-muted">无追踪记录</p>';
+                }
+                
+                return clone;
+            }
+            
+            // 格式化日期时间
+            function formatDateTime(dateTimeStr) {
+                if (!dateTimeStr) return '未知';
+                
+                const date = new Date(dateTimeStr);
+                if (isNaN(date.getTime())) return dateTimeStr;
+                
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            
+            // 格式化价格
+            function formatPrice(price) {
+                return '¥' + Number(price).toFixed(2);
+            }
+        });
+    </script>
+</body>
+</html> 

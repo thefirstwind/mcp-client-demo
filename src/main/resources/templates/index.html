@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Client Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            background-color: #e9f5ff;
+            padding: 8px 12px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            max-width: 80%;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        .assistant-message {
+            background-color: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            max-width: 80%;
+        }
+        .message-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .tools-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .typing-indicator {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            animation: typing 1s infinite;
+            background-color: #666;
+            border-radius: 50%;
+        }
+        @keyframes typing {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        .typing-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .actions {
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        
+        /* 长时间思考提示样式 */
+        .thinking-notice {
+            display: none;
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 14px;
+        }
+        .cancel-button {
+            margin-left: 10px;
+            color: #dc3545;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        /* 消息卡片样式 */
+        .message-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            background-color: white;
+            transition: transform 0.2s ease;
+        }
+        .message-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .card-header {
+            padding: 12px 15px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+        .card-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+        }
+        .card-content {
+            padding: 15px;
+        }
+        .card-footer {
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            font-size: 0.9em;
+            text-align: right;
+        }
+        .order-card .card-header {
+            background-color: #e7f1ff;
+            color: #0d6efd;
+        }
+        .logistics-card .card-header {
+            background-color: #e2f6ff;
+            color: #0dcaf0;
+        }
+        .tracking-card .card-header {
+            background-color: #e2f9e7;
+            color: #198754;
+        }
+        .card-info-row {
+            display: flex;
+            margin-bottom: 8px;
+        }
+        .card-info-label {
+            font-weight: bold;
+            width: 80px;
+            flex-shrink: 0;
+        }
+        .card-info-value {
+            flex-grow: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>MCP Client Demo</h1>
+            <div th:if="${showCardsLink}">
+                <a href="/cards" class="btn btn-outline-primary">查看消息卡片</a>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <!-- Chat Interface -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Chat Interface</h5>
+                        <div>
+                            <select id="domainSelector" class="form-select form-select-sm">
+                                <option value="">All Domains</option>
+                                <option th:each="domain : ${domains}" th:value="${domain}" th:text="${domain}"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="actions">
+                            <button id="clearButton" class="btn btn-sm btn-outline-secondary">Clear Conversation</button>
+                        </div>
+                        <div id="chatContainer" class="chat-container message-container">
+                            <!-- Messages will be added here dynamically -->
+                            <div id="typingIndicator" class="typing-container">
+                                <div class="typing-indicator"></div>
+                                <div class="typing-indicator" style="animation-delay: 0.2s"></div>
+                                <div class="typing-indicator" style="animation-delay: 0.4s"></div>
+                                <span>AI is typing...</span>
+                            </div>
+                            <!-- 长时间思考提示 -->
+                            <div id="thinkingNotice" class="thinking-notice">
+                                AI正在思考中，这可能需要一些时间... <span id="cancelButton" class="cancel-button">取消</span>
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="messageInput" class="form-control" placeholder="Type your message...">
+                            <button id="sendButton" class="btn btn-primary">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <!-- MCP Tools List -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Available MCP Tools</h5>
+                    </div>
+                    <div class="card-body tools-container">
+                        <div class="list-group">
+                            <div th:each="tool : ${tools}" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1" th:text="${tool.name}">Tool Name</h6>
+                                    <small th:text="${tool.domain}">Domain</small>
+                                </div>
+                                <p class="mb-1" th:text="${tool.description}">Tool description</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageInput = document.getElementById('messageInput');
+            const sendButton = document.getElementById('sendButton');
+            const domainSelector = document.getElementById('domainSelector');
+            const clearButton = document.getElementById('clearButton');
+            const typingIndicator = document.getElementById('typingIndicator');
+            const thinkingNotice = document.getElementById('thinkingNotice');
+            const cancelButton = document.getElementById('cancelButton');
+            
+            // 用于跟踪当前请求的变量
+            let currentController = null;
+            let thinkingTimer = null;
+            
+            // Load conversation history when the page loads
+            loadConversationHistory();
+            
+            // Function to add a message to the chat
+            function addMessage(message, isUser) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = isUser ? 'user-message' : 'assistant-message';
+                
+                if (isUser) {
+                    // User messages are added immediately
+                    messageDiv.textContent = message;
+                    chatContainer.appendChild(messageDiv);
+                } else {
+                    // For AI responses, add with typing effect
+                    chatContainer.appendChild(messageDiv);
+                    // 检查是否包含卡片标记
+                    if (message.includes('@cards[')) {
+                        typeMessageWithCard(messageDiv, message);
+                    } else {
+                        typeMessageEffect(messageDiv, message);
+                    }
+                }
+                
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            
+            // Function to simulate typing effect
+            function typeMessageEffect(element, message) {
+                let i = 0;
+                const typingSpeed = 10; // milliseconds per character
+                
+                // Show typing indicator
+                typingIndicator.style.display = 'flex';
+                
+                function typeNextChar() {
+                    if (i < message.length) {
+                        element.textContent += message.charAt(i);
+                        i++;
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                        setTimeout(typeNextChar, typingSpeed);
+                    } else {
+                        // Hide typing indicator when done
+                        typingIndicator.style.display = 'none';
+                    }
+                }
+                
+                // Start with empty content
+                element.textContent = '';
+                // Start typing effect
+                setTimeout(typeNextChar, typingSpeed);
+            }
+            
+            // 带卡片的消息打字效果
+            function typeMessageWithCard(element, message) {
+                // 提取文本部分和卡片标记
+                const cardMatch = message.match(/@cards\[([\w-]+),([\w-]+)\]/);
+                if (!cardMatch) {
+                    // 如果没有匹配成功，使用普通文本效果
+                    typeMessageEffect(element, message);
+                    return;
+                }
+                
+                const cardId = cardMatch[1];
+                const cardType = cardMatch[2];
+                const textParts = message.split(/@cards\[[\w-]+,[\w-]+\]/);
+                
+                // 清空元素
+                element.textContent = '';
+                
+                // 第一部分文本
+                let textPart = document.createElement('div');
+                element.appendChild(textPart);
+                
+                // 打字效果函数
+                let i = 0;
+                const typingSpeed = 10;
+                
+                // 显示打字指示器
+                typingIndicator.style.display = 'flex';
+                
+                function typeText() {
+                    if (i < textParts[0].length) {
+                        textPart.textContent += textParts[0].charAt(i);
+                        i++;
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                        setTimeout(typeText, typingSpeed);
+                    } else {
+                        // 文本打完后，加载并显示卡片
+                        loadAndDisplayCard(cardId, cardType, element, textParts.length > 1 ? textParts[1] : '');
+                    }
+                }
+                
+                // 开始打字效果
+                setTimeout(typeText, typingSpeed);
+            }
+            
+            // 加载并显示卡片
+            function loadAndDisplayCard(cardId, cardType, parentElement, remainingText) {
+                fetch(`/api/cards/${cardId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Card not found');
+                        }
+                        return response.json();
+                    })
+                    .then(card => {
+                        // 创建卡片元素
+                        const cardElement = createCardElement(card);
+                        parentElement.appendChild(cardElement);
+                        
+                        // 如果有剩余文本，继续打字效果
+                        if (remainingText && remainingText.trim() !== '') {
+                            const textPart = document.createElement('div');
+                            parentElement.appendChild(textPart);
+                            
+                            let i = 0;
+                            const typingSpeed = 10;
+                            
+                            function typeRemainingText() {
+                                if (i < remainingText.length) {
+                                    textPart.textContent += remainingText.charAt(i);
+                                    i++;
+                                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                                    setTimeout(typeRemainingText, typingSpeed);
+                                } else {
+                                    // 打字完成，隐藏指示器
+                                    typingIndicator.style.display = 'none';
+                                }
+                            }
+                            
+                            setTimeout(typeRemainingText, typingSpeed);
+                        } else {
+                            // 没有剩余文本，直接隐藏指示器
+                            typingIndicator.style.display = 'none';
+                        }
+                        
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    })
+                    .catch(error => {
+                        console.error('Error loading card:', error);
+                        // 错误处理，继续显示剩余文本
+                        if (remainingText) {
+                            const textPart = document.createElement('div');
+                            textPart.textContent = remainingText;
+                            parentElement.appendChild(textPart);
+                        }
+                        typingIndicator.style.display = 'none';
+                    });
+            }
+            
+            // 创建卡片元素
+            function createCardElement(card) {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `message-card ${card.type}-card`;
+                
+                // 卡片头部
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'card-header';
+                headerDiv.innerHTML = `
+                    <img src="${card.iconUrl || `/images/${card.type}-icon.png`}" class="card-icon" alt="图标">
+                    <span>${card.title}</span>
+                `;
+                cardDiv.appendChild(headerDiv);
+                
+                // 卡片内容
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'card-content';
+                
+                // 描述
+                if (card.description) {
+                    const descDiv = document.createElement('p');
+                    descDiv.textContent = card.description;
+                    contentDiv.appendChild(descDiv);
+                }
+                
+                // 根据卡片类型添加不同内容
+                switch (card.type) {
+                    case 'order':
+                        addOrderCardContent(contentDiv, card);
+                        break;
+                    case 'logistics':
+                        addLogisticsCardContent(contentDiv, card);
+                        break;
+                    case 'tracking':
+                        addTrackingCardContent(contentDiv, card);
+                        break;
+                }
+                
+                cardDiv.appendChild(contentDiv);
+                
+                // 卡片底部
+                const footerDiv = document.createElement('div');
+                footerDiv.className = 'card-footer';
+                footerDiv.innerHTML = `
+                    <a href="${card.actionUrl || '#'}" target="_blank">查看详情 →</a>
+                `;
+                cardDiv.appendChild(footerDiv);
+                
+                return cardDiv;
+            }
+            
+            // 添加订单卡片内容
+            function addOrderCardContent(container, card) {
+                // 订单编号
+                addInfoRow(container, '订单编号', card.orderNumber);
+                
+                // 订单状态
+                addInfoRow(container, '订单状态', card.orderStatus);
+                
+                // 订单金额
+                addInfoRow(container, '订单金额', formatPrice(card.totalAmount));
+                
+                // 如果有商品信息，显示第一个商品
+                if (card.items && card.items.length > 0) {
+                    const item = card.items[0];
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'mt-2';
+                    itemDiv.innerHTML = `
+                        <small class="text-muted">包含 ${card.items.length} 件商品</small>
+                    `;
+                    container.appendChild(itemDiv);
+                }
+            }
+            
+            // 添加物流卡片内容
+            function addLogisticsCardContent(container, card) {
+                // 快递公司
+                addInfoRow(container, '快递公司', card.courierCompany);
+                
+                // 物流单号
+                addInfoRow(container, '物流单号', card.trackingNumber);
+                
+                // 物流状态
+                addInfoRow(container, '当前状态', card.status);
+                
+                // 最新更新
+                addInfoRow(container, '最新更新', card.latestUpdate);
+                
+                // 预计送达
+                if (card.estimatedDeliveryTime) {
+                    addInfoRow(container, '预计送达', formatDateTime(card.estimatedDeliveryTime));
+                }
+            }
+            
+            // 添加物流追踪卡片内容
+            function addTrackingCardContent(container, card) {
+                // 快递公司
+                addInfoRow(container, '快递公司', card.courierCompany);
+                
+                // 物流单号
+                addInfoRow(container, '物流单号', card.trackingNumber);
+                
+                // 运输路线
+                addInfoRow(container, '配送路线', `${card.originLocation} → ${card.destinationLocation}`);
+                
+                // 进度条
+                const percentage = card.completionPercentage || 0;
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'mt-2';
+                progressDiv.innerHTML = `
+                    <div class="d-flex justify-content-between">
+                        <small>配送进度</small>
+                        <small>${percentage}%</small>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar" role="progressbar" style="width: ${percentage}%" aria-valuenow="${percentage}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                `;
+                container.appendChild(progressDiv);
+                
+                // 如果有追踪记录，显示最新的一条
+                if (card.trackingDetails && card.trackingDetails.length > 0) {
+                    const latestDetail = card.trackingDetails.find(d => d.current) || card.trackingDetails[0];
+                    const detailDiv = document.createElement('div');
+                    detailDiv.className = 'mt-2';
+                    detailDiv.innerHTML = `
+                        <small class="text-muted">最新动态：${latestDetail.status} - ${latestDetail.location}</small>
+                    `;
+                    container.appendChild(detailDiv);
+                }
+            }
+            
+            // 添加信息行
+            function addInfoRow(container, label, value) {
+                const row = document.createElement('div');
+                row.className = 'card-info-row';
+                row.innerHTML = `
+                    <div class="card-info-label">${label}:</div>
+                    <div class="card-info-value">${value}</div>
+                `;
+                container.appendChild(row);
+            }
+            
+            // 格式化日期时间
+            function formatDateTime(dateTimeStr) {
+                if (!dateTimeStr) return '未知';
+                
+                const date = new Date(dateTimeStr);
+                if (isNaN(date.getTime())) return dateTimeStr;
+                
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+            
+            // 格式化价格
+            function formatPrice(price) {
+                return '¥' + Number(price).toFixed(2);
+            }
+            
+            // Function to load conversation history
+            function loadConversationHistory() {
+                fetch('/api/conversation')
+                    .then(response => response.json())
+                    .then(messages => {
+                        // Clear chat container first
+                        while (chatContainer.firstChild && chatContainer.firstChild !== typingIndicator) {
+                            chatContainer.removeChild(chatContainer.firstChild);
+                        }
+                        
+                        // Add each message from history
+                        messages.forEach(msg => {
+                            const messageDiv = document.createElement('div');
+                            messageDiv.className = msg.role === 'user' ? 'user-message' : 'assistant-message';
+                            
+                            // 检查是否包含卡片标记
+                            if (msg.role === 'assistant' && msg.content.includes('@cards[')) {
+                                // 解析卡片标记并添加卡片
+                                parseAndAddCard(messageDiv, msg.content);
+                            } else {
+                                messageDiv.textContent = msg.content;
+                            }
+                            
+                            chatContainer.insertBefore(messageDiv, typingIndicator);
+                        });
+                        
+                        // Scroll to bottom
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    })
+                    .catch(error => {
+                        console.error('Error loading conversation history:', error);
+                    });
+            }
+            
+            // 解析消息并添加卡片
+            function parseAndAddCard(element, message) {
+                const cardMatch = message.match(/@cards\[([\w-]+),([\w-]+)\]/);
+                if (!cardMatch) {
+                    // 如果没有匹配成功，作为普通文本显示
+                    element.textContent = message;
+                    return;
+                }
+                
+                const cardId = cardMatch[1];
+                const cardType = cardMatch[2];
+                const textParts = message.split(/@cards\[[\w-]+,[\w-]+\]/);
+                
+                // 第一部分文本
+                let textPart = document.createElement('div');
+                textPart.textContent = textParts[0];
+                element.appendChild(textPart);
+                
+                // 加载并显示卡片
+                fetch(`/api/cards/${cardId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Card not found');
+                        }
+                        return response.json();
+                    })
+                    .then(card => {
+                        // 创建卡片元素
+                        const cardElement = createCardElement(card);
+                        element.appendChild(cardElement);
+                        
+                        // 如果有第二部分文本
+                        if (textParts.length > 1 && textParts[1].trim() !== '') {
+                            let remainingText = document.createElement('div');
+                            remainingText.textContent = textParts[1];
+                            element.appendChild(remainingText);
+                        }
+                        
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    })
+                    .catch(error => {
+                        console.error('Error loading card:', error);
+                        // 错误处理，显示原始消息
+                        element.textContent = message;
+                    });
+            }
+            
+            // Function to clear conversation
+            function clearConversation() {
+                fetch('/api/conversation/clear', {
+                    method: 'POST'
+                })
+                .then(() => {
+                    // Clear messages from UI
+                    while (chatContainer.firstChild && chatContainer.firstChild !== typingIndicator) {
+                        chatContainer.removeChild(chatContainer.firstChild);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error clearing conversation:', error);
+                });
+            }
+            
+            // Function to send a message to the server
+            function sendMessage() {
+                const message = messageInput.value.trim();
+                const domain = domainSelector.value;
+                
+                if (message) {
+                    // Add user message to chat
+                    addMessage(message, true);
+                    messageInput.value = '';
+                    
+                    // Disable input while waiting for response
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    
+                    // Show typing indicator
+                    typingIndicator.style.display = 'flex';
+                    
+                    // 清除之前的长时间思考提示计时器
+                    if (thinkingTimer) {
+                        clearTimeout(thinkingTimer);
+                    }
+                    
+                    // 5秒后显示长时间思考提示
+                    thinkingTimer = setTimeout(() => {
+                        thinkingNotice.style.display = 'block';
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }, 5000);
+                    
+                    // 创建AbortController用于取消请求
+                    currentController = new AbortController();
+                    const signal = currentController.signal;
+                    
+                    // Send message to server
+                    fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            domain: domain
+                        }),
+                        signal: signal
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // 清除长时间思考提示计时器
+                        if (thinkingTimer) {
+                            clearTimeout(thinkingTimer);
+                            thinkingTimer = null;
+                        }
+                        
+                        // 隐藏长时间思考提示
+                        thinkingNotice.style.display = 'none';
+                        
+                        // Hide typing indicator (will be shown again during typing effect)
+                        typingIndicator.style.display = 'none';
+                        
+                        // Add response to chat with typing effect
+                        if (data.success) {
+                            addMessage(data.message, false);
+                        } else {
+                            addMessage('Error: ' + data.message, false);
+                        }
+                        
+                        // Re-enable input
+                        messageInput.disabled = false;
+                        sendButton.disabled = false;
+                        messageInput.focus();
+                        
+                        // 清除当前控制器
+                        currentController = null;
+                    })
+                    .catch(error => {
+                        // 清除长时间思考提示计时器
+                        if (thinkingTimer) {
+                            clearTimeout(thinkingTimer);
+                            thinkingTimer = null;
+                        }
+                        
+                        // 隐藏长时间思考提示
+                        thinkingNotice.style.display = 'none';
+                        
+                        // Hide typing indicator
+                        typingIndicator.style.display = 'none';
+                        
+                        // 如果不是用户取消的请求，显示错误信息
+                        if (error.name !== 'AbortError') {
+                            // Show error
+                            addMessage('Error communicating with server: ' + error, false);
+                        } else {
+                            // 用户取消的请求，显示取消信息
+                            addMessage('AI response was cancelled.', false);
+                        }
+                        
+                        // Re-enable input
+                        messageInput.disabled = false;
+                        sendButton.disabled = false;
+                        
+                        // 清除当前控制器
+                        currentController = null;
+                    });
+                }
+            }
+            
+            // Event listeners
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            clearButton.addEventListener('click', clearConversation);
+            
+            // 取消按钮事件监听
+            cancelButton.addEventListener('click', function() {
+                if (currentController) {
+                    // 取消当前请求
+                    currentController.abort();
+                    
+                    // 清除长时间思考提示计时器
+                    if (thinkingTimer) {
+                        clearTimeout(thinkingTimer);
+                        thinkingTimer = null;
+                    }
+                    
+                    // 隐藏长时间思考提示
+                    thinkingNotice.style.display = 'none';
+                    
+                    // 隐藏打字指示器
+                    typingIndicator.style.display = 'none';
+                    
+                    // 启用输入控件
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    messageInput.focus();
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,7 @@
+这个文件只是一个占位符，用于确保images目录被包含在构建中。
+实际应用中应该替换为真实的图像文件，如：
+- order-icon.png
+- logistics-icon.png
+- tracking-icon.png
+- product-placeholder.jpg
+- courier-placeholder.jpg 
