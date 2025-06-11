@@ -272,16 +272,37 @@ public class MessageCardService {
      */
     public OrderMessageCard createOrderCardFromMessage(String message) {
         // 尝试从消息中提取订单号
-        String orderNumber = "OD" + System.currentTimeMillis();
+        String orderNumber = null;
+        boolean specificOrderRequested = false;
+        
         // 尝试使用正则表达式从消息中提取订单号格式 (例如: OD12345678)
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(订单号|订单编号|订单)[:：\\s]*(\\w+)");
         java.util.regex.Matcher matcher = pattern.matcher(message);
         if (matcher.find() && matcher.group(2) != null) {
             orderNumber = matcher.group(2);
+            specificOrderRequested = true;
+            
             // 如果提取的订单号不以OD开头，添加前缀
             if (!orderNumber.toUpperCase().startsWith("OD")) {
                 orderNumber = "OD" + orderNumber;
             }
+            
+            // 这里模拟数据库查询：如果订单号包含"404"、"不存在"或"unknown"，表示订单不存在
+            if (orderNumber.toLowerCase().contains("404") || 
+                orderNumber.toLowerCase().contains("不存在") || 
+                orderNumber.toLowerCase().contains("unknown")) {
+                log.info("Specific order requested but not found: {}", orderNumber);
+                return null;
+            }
+        } else {
+            // 如果没有指定订单号，生成一个随机订单号
+            orderNumber = "OD" + System.currentTimeMillis();
+        }
+        
+        // 检查消息中是否明确要求查询不存在的订单
+        if (message.contains("不存在的订单") || message.contains("未找到") || message.contains("找不到")) {
+            log.info("User explicitly asked for non-existent order");
+            return null;
         }
         
         // 检测订单状态
@@ -334,11 +355,32 @@ public class MessageCardService {
      */
     public LogisticsMessageCard createLogisticsCardFromMessage(String message) {
         // 尝试从消息中提取快递单号
-        String trackingNumber = "SF" + System.currentTimeMillis();
+        String trackingNumber = null;
+        boolean specificTrackingRequested = false;
+        
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(快递单号|物流单号|单号|运单号)[:：\\s]*(\\w+)");
         java.util.regex.Matcher matcher = pattern.matcher(message);
         if (matcher.find() && matcher.group(2) != null) {
             trackingNumber = matcher.group(2);
+            specificTrackingRequested = true;
+            
+            // 这里模拟数据库查询：如果物流单号包含"404"、"不存在"或"unknown"，表示物流信息不存在
+            if (trackingNumber.toLowerCase().contains("404") || 
+                trackingNumber.toLowerCase().contains("不存在") || 
+                trackingNumber.toLowerCase().contains("unknown")) {
+                log.info("Specific tracking number requested but not found: {}", trackingNumber);
+                return null;
+            }
+        } else {
+            // 如果没有指定物流单号，生成一个随机物流单号
+            trackingNumber = "SF" + System.currentTimeMillis();
+        }
+        
+        // 检查消息中是否明确要求查询不存在的物流
+        if (message.contains("不存在的物流") || message.contains("不存在的快递") || 
+            message.contains("未找到快递") || message.contains("找不到物流")) {
+            log.info("User explicitly asked for non-existent logistics");
+            return null;
         }
         
         // 从消息中提取快递公司
@@ -464,11 +506,32 @@ public class MessageCardService {
      */
     public LogisticsTrackingCard createTrackingCardFromMessage(String message) {
         // 提取快递单号
-        String trackingNumber = "SF" + System.currentTimeMillis();
+        String trackingNumber = null;
+        boolean specificTrackingRequested = false;
+        
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(快递单号|物流单号|单号|运单号)[:：\\s]*(\\w+)");
         java.util.regex.Matcher matcher = pattern.matcher(message);
         if (matcher.find() && matcher.group(2) != null) {
             trackingNumber = matcher.group(2);
+            specificTrackingRequested = true;
+            
+            // 这里模拟数据库查询：如果物流单号包含"404"、"不存在"或"unknown"，表示物流信息不存在
+            if (trackingNumber.toLowerCase().contains("404") || 
+                trackingNumber.toLowerCase().contains("不存在") || 
+                trackingNumber.toLowerCase().contains("unknown")) {
+                log.info("Specific tracking number requested but not found: {}", trackingNumber);
+                return null;
+            }
+        } else {
+            // 如果没有指定物流单号，生成一个随机物流单号
+            trackingNumber = "SF" + System.currentTimeMillis();
+        }
+        
+        // 检查消息中是否明确要求查询不存在的物流
+        if (message.contains("不存在的物流") || message.contains("不存在的快递") || 
+            message.contains("未找到快递") || message.contains("找不到物流")) {
+            log.info("User explicitly asked for non-existent logistics tracking");
+            return null;
         }
         
         // 从消息中提取快递公司

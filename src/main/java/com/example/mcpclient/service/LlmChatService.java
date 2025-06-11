@@ -98,8 +98,16 @@ public class LlmChatService {
                                 messageCardService.addCard(logisticsCard);
                                 String logisticsCardMarkup = generateCardMarkup(logisticsCard);
                                 responseBuilder.append("\n\n该订单的物流信息：\n\n").append(logisticsCardMarkup);
+                            } else {
+                                // 明确告知用户无物流信息
+                                responseBuilder.append("\n\n抱歉，未能查询到该订单的物流信息。可能是该订单尚未发货，或物流信息尚未更新。");
                             }
                         }
+                    } else {
+                        // 明确告知用户未找到订单信息
+                        String response = "抱歉，未能查询到您要找的订单信息。请确认订单号是否正确，或尝试提供更多订单详情。";
+                        conversationService.addAssistantMessage(sessionId, response, request.getDomain());
+                        return new ChatResponse(response);
                     }
                 } 
                 // 如果只是物流查询，创建相应的物流卡片
@@ -113,6 +121,11 @@ public class LlmChatService {
                             String trackingCardMarkup = generateCardMarkup(logisticsCard);
                             responseBuilder.append("以下是您查询的物流追踪详情：\n\n").append(trackingCardMarkup);
                             hasCards = true;
+                        } else {
+                            // 明确告知用户未找到物流追踪信息
+                            String response = "抱歉，未能查询到您要找的物流追踪信息。请确认物流单号是否正确，或尝试提供更多物流详情。";
+                            conversationService.addAssistantMessage(sessionId, response, request.getDomain());
+                            return new ChatResponse(response);
                         }
                     } else {
                         logisticsCard = messageCardService.createLogisticsCardFromMessage(request.getMessage());
@@ -122,6 +135,11 @@ public class LlmChatService {
                             String logisticsCardMarkup = generateCardMarkup(logisticsCard);
                             responseBuilder.append("以下是您查询的物流信息：\n\n").append(logisticsCardMarkup);
                             hasCards = true;
+                        } else {
+                            // 明确告知用户未找到物流信息
+                            String response = "抱歉，未能查询到您要找的物流信息。请确认物流单号是否正确，或尝试提供更多物流详情。";
+                            conversationService.addAssistantMessage(sessionId, response, request.getDomain());
+                            return new ChatResponse(response);
                         }
                     }
                 }
