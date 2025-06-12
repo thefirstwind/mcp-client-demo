@@ -4,6 +4,7 @@ import io.modelcontextprotocol.client.McpAsyncClient;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  * 
  * Note: These tests require the userCenter MCP server to be running on localhost:8084.
  */
+@Slf4j
 public class UserCenter2McpAsyncClientResiliencyTests {
 
     private static final String USER_CENTER_SERVER_URL = "http://localhost:8084";
