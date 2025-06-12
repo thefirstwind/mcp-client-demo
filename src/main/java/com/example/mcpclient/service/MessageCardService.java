@@ -7,6 +7,7 @@ import com.example.mcpclient.model.OrderMessageCard;
 import com.example.mcpclient.model.LogisticsTrackingCard.TrackingDetail;
 import com.example.mcpclient.model.OrderMessageCard.OrderItem;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -27,6 +28,12 @@ public class MessageCardService {
     
     // 存储所有消息卡片的内存数据库
     private final Map<String, MessageCard> cardDatabase = new ConcurrentHashMap<>();
+    
+    @Autowired
+    private OrderDataService orderDataService;
+    
+    @Autowired
+    private UserDataService userDataService;
     
     /**
      * 获取指定ID的消息卡片
@@ -240,24 +247,20 @@ public class MessageCardService {
     }
     
     /**
-     * 检测消息文本中是否包含订单、物流相关内容，并创建相应的卡片
-     * 
-     * 注意：此方法保留是为了向后兼容，新代码应直接调用 createOrderCardFromMessage 或 createLogisticsCardFromMessage 等方法
+     * 检测消息文本中是否包含订单、物流相关内容
      */
     public MessageCard detectCardFromMessage(String message) {
         // 简单的关键词检测逻辑
         message = message.toLowerCase();
         
         // 检测订单信息
-        if (message.contains("订单") || message.contains("查询订单") || message.contains("订单信息") || 
-            message.contains("我的订单") || message.contains("查一下订单")) {
+        if (message.contains("订单") && (message.contains("已发货") || message.contains("待付款") || message.contains("已付款"))) {
             return createOrderCardFromMessage(message);
         }
         
         // 检测物流信息
-        if (message.contains("物流") || message.contains("快递") || message.contains("包裹") || 
-            message.contains("查物流") || message.contains("查询物流") || message.contains("查包裹")) {
-            if (message.contains("追踪") || message.contains("详情") || message.contains("跟踪") || message.contains("运输状态")) {
+        if (message.contains("物流") || message.contains("快递") || message.contains("包裹")) {
+            if (message.contains("追踪") || message.contains("详情") || message.contains("跟踪")) {
                 return createTrackingCardFromMessage(message);
             } else {
                 return createLogisticsCardFromMessage(message);
@@ -285,6 +288,13 @@ public class MessageCardService {
             // 如果提取的订单号不以OD开头，添加前缀
             if (!orderNumber.toUpperCase().startsWith("OD")) {
                 orderNumber = "OD" + orderNumber;
+            }
+            
+            // 尝试从MCP服务获取订单信息
+            com.fasterxml.jackson.databind.JsonNode orderData = orderDataService.getOrderByOrderNo(orderNumber);
+            if (orderData != null) {
+                log.info("从MCP服务获取到订单信息: {}", orderNumber);
+                return createOrderCardFromData(orderData);
             }
             
             // 这里模拟数据库查询：如果订单号包含"404"、"不存在"或"unknown"，表示订单不存在
@@ -319,13 +329,16 @@ public class MessageCardService {
             orderStatus = "已取消";
         }
         
-        // 创建一个简单的订单项
+        // 创建一个示例订单项
         List<OrderItem> items = new ArrayList<>();
         items.add(OrderItem.builder()
                 .productName("智能手表")
                 .imageUrl("/images/product-watch.jpg")
                 .price(999.0)
                 .quantity(1)
+                .productId(1001L)
+                .productSku("WATCH-2023")
+                .productCategory("电子产品")
                 .build());
         
         items.add(OrderItem.builder()
@@ -333,7 +346,16 @@ public class MessageCardService {
                 .imageUrl("/images/product-headphones.jpg")
                 .price(499.0)
                 .quantity(1)
+                .productId(1002L)
+                .productSku("HP-2023")
+                .productCategory("电子产品")
                 .build());
+        
+        // 创建一个模拟用户信息
+        Long userId = 10001L;
+        String userName = "张三";
+        String userPhone = "135****6789";
+        String userAddress = "北京市海淀区中关村大街1号";
         
         return OrderMessageCard.builder()
                 .id(UUID.randomUUID().toString())
@@ -347,416 +369,212 @@ public class MessageCardService {
                 .orderTime(LocalDateTime.now().minus(1, ChronoUnit.DAYS))
                 .totalAmount(1498.0)
                 .items(items)
+                .userId(userId)
+                .userName(userName)
+                .userPhone(userPhone)
+                .userAddress(userAddress)
                 .build();
     }
     
     /**
      * 从消息文本创建物流卡片
      */
-    public LogisticsMessageCard createLogisticsCardFromMessage(String message) {
-        // 尝试从消息中提取快递单号
-        String trackingNumber = null;
-        boolean specificTrackingRequested = false;
-        
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(快递单号|物流单号|单号|运单号)[:：\\s]*(\\w+)");
-        java.util.regex.Matcher matcher = pattern.matcher(message);
-        if (matcher.find() && matcher.group(2) != null) {
-            trackingNumber = matcher.group(2);
-            specificTrackingRequested = true;
-            
-            // 这里模拟数据库查询：如果物流单号包含"404"、"不存在"或"unknown"，表示物流信息不存在
-            if (trackingNumber.toLowerCase().contains("404") || 
-                trackingNumber.toLowerCase().contains("不存在") || 
-                trackingNumber.toLowerCase().contains("unknown")) {
-                log.info("Specific tracking number requested but not found: {}", trackingNumber);
-                return null;
-            }
-        } else {
-            // 如果没有指定物流单号，生成一个随机物流单号
-            trackingNumber = "SF" + System.currentTimeMillis();
-        }
-        
-        // 检查消息中是否明确要求查询不存在的物流
-        if (message.contains("不存在的物流") || message.contains("不存在的快递") || 
-            message.contains("未找到快递") || message.contains("找不到物流")) {
-            log.info("User explicitly asked for non-existent logistics");
-            return null;
-        }
-        
-        // 从消息中提取快递公司
-        String courierCompany = "顺丰速运";
-        if (message.contains("顺丰")) {
-            courierCompany = "顺丰速运";
-        } else if (message.contains("圆通")) {
-            courierCompany = "圆通快递";
-        } else if (message.contains("中通")) {
-            courierCompany = "中通快递";
-        } else if (message.contains("申通")) {
-            courierCompany = "申通快递";
-        } else if (message.contains("韵达")) {
-            courierCompany = "韵达快递";
-        } else if (message.contains("邮政")) {
-            courierCompany = "中国邮政";
-        } else if (message.contains("京东")) {
-            courierCompany = "京东物流";
-        }
-        
-        // 获取物流状态
+    private LogisticsMessageCard createLogisticsCardFromMessage(String message) {
         String status = "未知";
-        if (message.contains("已发出") || message.contains("已发货")) {
+        if (message.contains("已发出")) {
             status = "已发出";
-        } else if (message.contains("运输中") || message.contains("在途中")) {
+        } else if (message.contains("运输中")) {
             status = "运输中";
-        } else if (message.contains("已签收") || message.contains("已收到")) {
+        } else if (message.contains("已签收")) {
             status = "已签收";
-        } else if (message.contains("派送中") || message.contains("配送中") || message.contains("派件中")) {
+        } else if (message.contains("派送中")) {
             status = "派送中";
-        } else if (message.contains("已揽收") || message.contains("已收件")) {
-            status = "已揽收";
-        }
-        
-        // 根据物流状态设置最新更新
-        String latestUpdate;
-        switch (status) {
-            case "已发出":
-                latestUpdate = "您的包裹已由卖家发出";
-                break;
-            case "运输中":
-                latestUpdate = "您的包裹正在运输中";
-                break;
-            case "已签收":
-                latestUpdate = "您的包裹已签收";
-                break;
-            case "派送中":
-                latestUpdate = "您的包裹正在派送中，请保持电话畅通";
-                break;
-            case "已揽收":
-                latestUpdate = "您的包裹已被快递员揽收";
-                break;
-            default:
-                latestUpdate = "暂无更新";
-                break;
-        }
-        
-        String orderNumber = "OD" + System.currentTimeMillis();
-        pattern = java.util.regex.Pattern.compile("(?i)(订单号|订单编号|订单)[:：\\s]*(\\w+)");
-        matcher = pattern.matcher(message);
-        if (matcher.find() && matcher.group(2) != null) {
-            orderNumber = matcher.group(2);
-            if (!orderNumber.toUpperCase().startsWith("OD")) {
-                orderNumber = "OD" + orderNumber;
-            }
         }
         
         return LogisticsMessageCard.builder()
                 .id(UUID.randomUUID().toString())
-                .title(courierCompany + "物流信息")
-                .description("包裹" + status + "，" + latestUpdate)
+                .title("物流" + status)
+                .description("您的包裹" + status)
                 .iconUrl("/images/logistics-icon.png")
-                .actionUrl("/logistics/" + trackingNumber)
+                .actionUrl("/logistics/detail")
                 .createdTime(LocalDateTime.now())
-                .courierCompany(courierCompany)
-                .courierLogo("/images/courier-" + getCourierCode(courierCompany) + ".png")
-                .orderNumber(orderNumber)
-                .trackingNumber(trackingNumber)
+                .courierCompany("顺丰速运")
+                .courierLogo("/images/courier-sf.png")
+                .orderNumber("OD" + System.currentTimeMillis())
+                .trackingNumber("SF" + System.currentTimeMillis())
                 .status(status)
-                .latestUpdate(latestUpdate)
-                .estimatedDeliveryTime(calculateEstimatedDeliveryTime(status))
+                .latestUpdate("包裹" + status)
+                .estimatedDeliveryTime(LocalDateTime.now().plus(2, ChronoUnit.DAYS))
                 .build();
-    }
-    
-    /**
-     * 根据快递公司获取代码
-     */
-    private String getCourierCode(String courierCompany) {
-        switch (courierCompany) {
-            case "顺丰速运": return "sf";
-            case "圆通快递": return "yt";
-            case "中通快递": return "zt";
-            case "申通快递": return "st";
-            case "韵达快递": return "yd";
-            case "中国邮政": return "ems";
-            case "京东物流": return "jd";
-            default: return "sf";
-        }
-    }
-    
-    /**
-     * 根据物流状态计算预计送达时间
-     */
-    private LocalDateTime calculateEstimatedDeliveryTime(String status) {
-        switch (status) {
-            case "已发出":
-                return LocalDateTime.now().plus(3, ChronoUnit.DAYS);
-            case "运输中":
-                return LocalDateTime.now().plus(2, ChronoUnit.DAYS);
-            case "派送中":
-                return LocalDateTime.now().plus(1, ChronoUnit.DAYS);
-            case "已揽收":
-                return LocalDateTime.now().plus(3, ChronoUnit.DAYS);
-            case "已签收":
-                return null;
-            default:
-                return LocalDateTime.now().plus(3, ChronoUnit.DAYS);
-        }
     }
     
     /**
      * 从消息文本创建物流追踪卡片
      */
-    public LogisticsTrackingCard createTrackingCardFromMessage(String message) {
-        // 提取快递单号
-        String trackingNumber = null;
-        boolean specificTrackingRequested = false;
-        
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(快递单号|物流单号|单号|运单号)[:：\\s]*(\\w+)");
-        java.util.regex.Matcher matcher = pattern.matcher(message);
-        if (matcher.find() && matcher.group(2) != null) {
-            trackingNumber = matcher.group(2);
-            specificTrackingRequested = true;
-            
-            // 这里模拟数据库查询：如果物流单号包含"404"、"不存在"或"unknown"，表示物流信息不存在
-            if (trackingNumber.toLowerCase().contains("404") || 
-                trackingNumber.toLowerCase().contains("不存在") || 
-                trackingNumber.toLowerCase().contains("unknown")) {
-                log.info("Specific tracking number requested but not found: {}", trackingNumber);
-                return null;
-            }
-        } else {
-            // 如果没有指定物流单号，生成一个随机物流单号
-            trackingNumber = "SF" + System.currentTimeMillis();
-        }
-        
-        // 检查消息中是否明确要求查询不存在的物流
-        if (message.contains("不存在的物流") || message.contains("不存在的快递") || 
-            message.contains("未找到快递") || message.contains("找不到物流")) {
-            log.info("User explicitly asked for non-existent logistics tracking");
-            return null;
-        }
-        
-        // 从消息中提取快递公司
-        String courierCompany = "顺丰速运";
-        if (message.contains("顺丰")) {
-            courierCompany = "顺丰速运";
-        } else if (message.contains("圆通")) {
-            courierCompany = "圆通快递";
-        } else if (message.contains("中通")) {
-            courierCompany = "中通快递";
-        } else if (message.contains("申通")) {
-            courierCompany = "申通快递";
-        } else if (message.contains("韵达")) {
-            courierCompany = "韵达快递";
-        } else if (message.contains("邮政")) {
-            courierCompany = "中国邮政";
-        } else if (message.contains("京东")) {
-            courierCompany = "京东物流";
-        }
-        
-        // 确定起始地和目的地
-        String originLocation = "广州";
-        String destinationLocation = "北京";
-        
-        // 如果消息中包含城市信息，尝试提取
-        pattern = java.util.regex.Pattern.compile("(?:从|自)([\u4e00-\u9fa5]+)(?:到|至|往)([\u4e00-\u9fa5]+)");
-        matcher = pattern.matcher(message);
-        if (matcher.find()) {
-            if (matcher.group(1) != null) originLocation = matcher.group(1);
-            if (matcher.group(2) != null) destinationLocation = matcher.group(2);
-        }
-        
+    private LogisticsTrackingCard createTrackingCardFromMessage(String message) {
         // 创建物流追踪记录
         List<TrackingDetail> trackingDetails = new ArrayList<>();
-        
-        // 尝试判断当前物流状态
-        String currentStatus = "运输中";
-        if (message.contains("已签收") || message.contains("已送达")) {
-            currentStatus = "已签收";
-        } else if (message.contains("派送中") || message.contains("配送中") || message.contains("派件中")) {
-            currentStatus = "派送中";
-        } else if (message.contains("已发货") || message.contains("已发出")) {
-            currentStatus = "已发货";
-        } else if (message.contains("已下单") || message.contains("待发货")) {
-            currentStatus = "已下单";
-        }
-        
-        // 根据当前状态生成不同的追踪详情
-        int completionPercentage = 0;
-        switch (currentStatus) {
-            case "已签收":
-                completionPercentage = 100;
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已签收")
-                        .description("包裹已签收，签收人：本人")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.HOURS))
-                        .location(destinationLocation)
-                        .current(true)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("派送中")
-                        .description("快递员正在派送，请保持电话畅通")
-                        .timestamp(LocalDateTime.now().minus(3, ChronoUnit.HOURS))
-                        .location(destinationLocation)
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("到达目的地")
-                        .description("包裹已到达" + destinationLocation + "转运中心")
-                        .timestamp(LocalDateTime.now().minus(10, ChronoUnit.HOURS))
-                        .location(destinationLocation)
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("运输中")
-                        .description("包裹正在运输中")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.DAYS))
-                        .location("中转站")
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已发货")
-                        .description("卖家已发货")
-                        .timestamp(LocalDateTime.now().minus(2, ChronoUnit.DAYS))
-                        .location(originLocation)
-                        .current(false)
-                        .build());
-                break;
-                
-            case "派送中":
-                completionPercentage = 80;
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("派送中")
-                        .description("快递员正在派送，请保持电话畅通")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.HOURS))
-                        .location(destinationLocation)
-                        .current(true)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("到达目的地")
-                        .description("包裹已到达" + destinationLocation + "转运中心")
-                        .timestamp(LocalDateTime.now().minus(8, ChronoUnit.HOURS))
-                        .location(destinationLocation)
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("运输中")
-                        .description("包裹正在运输中")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.DAYS))
-                        .location("中转站")
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已发货")
-                        .description("卖家已发货")
-                        .timestamp(LocalDateTime.now().minus(2, ChronoUnit.DAYS))
-                        .location(originLocation)
-                        .current(false)
-                        .build());
-                break;
-                
-            case "运输中":
-                completionPercentage = 50;
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("运输中")
-                        .description("包裹正在从" + originLocation + "发往" + destinationLocation)
-                        .timestamp(LocalDateTime.now().minus(12, ChronoUnit.HOURS))
-                        .location("中转站")
-                        .current(true)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已揽收")
-                        .description("快递员已揽收")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.DAYS))
-                        .location(originLocation)
-                        .current(false)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已发货")
-                        .description("卖家已发货")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.DAYS).minus(2, ChronoUnit.HOURS))
-                        .location(originLocation)
-                        .current(false)
-                        .build());
-                break;
-                
-            case "已发货":
-                completionPercentage = 20;
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已揽收")
-                        .description("快递员已揽收")
-                        .timestamp(LocalDateTime.now().minus(2, ChronoUnit.HOURS))
-                        .location(originLocation)
-                        .current(true)
-                        .build());
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已发货")
-                        .description("卖家已发货")
-                        .timestamp(LocalDateTime.now().minus(4, ChronoUnit.HOURS))
-                        .location(originLocation)
-                        .current(false)
-                        .build());
-                break;
-                
-            case "已下单":
-                completionPercentage = 10;
-                trackingDetails.add(TrackingDetail.builder()
-                        .status("已下单")
-                        .description("订单已生成，等待卖家发货")
-                        .timestamp(LocalDateTime.now().minus(1, ChronoUnit.HOURS))
-                        .location("系统")
-                        .current(true)
-                        .build());
-                break;
-        }
-        
-        // 提取订单号
-        String orderNumber = "OD" + System.currentTimeMillis();
-        pattern = java.util.regex.Pattern.compile("(?i)(订单号|订单编号|订单)[:：\\s]*(\\w+)");
-        matcher = pattern.matcher(message);
-        if (matcher.find() && matcher.group(2) != null) {
-            orderNumber = matcher.group(2);
-            if (!orderNumber.toUpperCase().startsWith("OD")) {
-                orderNumber = "OD" + orderNumber;
-            }
-        }
+        trackingDetails.add(TrackingDetail.builder()
+                .status("已揽收")
+                .description("快递员已揽收")
+                .timestamp(LocalDateTime.now().minus(2, ChronoUnit.DAYS))
+                .location("发货地")
+                .current(false)
+                .build());
+        trackingDetails.add(TrackingDetail.builder()
+                .status("运输中")
+                .description("包裹正在运输中")
+                .timestamp(LocalDateTime.now().minus(1, ChronoUnit.DAYS))
+                .location("中转站")
+                .current(true)
+                .build());
         
         return LogisticsTrackingCard.builder()
                 .id(UUID.randomUUID().toString())
-                .title(courierCompany + "物流追踪")
-                .description("订单 " + orderNumber + " 的物流追踪信息")
+                .title("物流追踪详情")
+                .description("包裹正在运输中")
                 .iconUrl("/images/tracking-icon.png")
-                .actionUrl("/tracking/" + trackingNumber)
+                .actionUrl("/logistics/tracking")
                 .createdTime(LocalDateTime.now())
-                .courierCompany(courierCompany)
-                .courierLogo("/images/courier-" + getCourierCode(courierCompany) + ".png")
-                .orderNumber(orderNumber)
-                .trackingNumber(trackingNumber)
-                .currentStatus(currentStatus)
-                .originLocation(originLocation)
-                .destinationLocation(destinationLocation)
-                .estimatedDistance(getEstimatedDistance(originLocation, destinationLocation))
-                .completionPercentage(completionPercentage)
-                .estimatedDeliveryTime(calculateEstimatedDeliveryTime(currentStatus))
+                .courierCompany("顺丰速运")
+                .courierLogo("/images/courier-sf.png")
+                .orderNumber("OD" + System.currentTimeMillis())
+                .trackingNumber("SF" + System.currentTimeMillis())
+                .originLocation("发货地")
+                .destinationLocation("收货地")
+                .completionPercentage(50)
                 .trackingDetails(trackingDetails)
                 .build();
     }
-    
+
     /**
-     * 估算两地之间的距离（简化处理）
+     * 获取订单状态文本
      */
-    private double getEstimatedDistance(String origin, String destination) {
-        // 这里使用固定的距离，实际应用中可以通过地图API计算
-        if ((origin.equals("广州") && destination.equals("北京")) || 
-            (origin.equals("北京") && destination.equals("广州"))) {
-            return 1897.5;
-        } else if ((origin.equals("上海") && destination.equals("北京")) || 
-                  (origin.equals("北京") && destination.equals("上海"))) {
-            return 1067.9;
-        } else if ((origin.equals("广州") && destination.equals("上海")) || 
-                  (origin.equals("上海") && destination.equals("广州"))) {
-            return 1213.0;
-        } else {
-            // 默认距离
-            return 1000.0;
+    private String getOrderStatusText(int statusCode) {
+        switch (statusCode) {
+            case 0: return "待付款";
+            case 1: return "已付款";
+            case 2: return "已发货";
+            case 3: return "已完成";
+            case 4: return "已取消";
+            default: return "未知";
+        }
+    }
+
+    /**
+     * 从API返回的订单数据创建订单卡片
+     */
+    private OrderMessageCard createOrderCardFromData(com.fasterxml.jackson.databind.JsonNode orderData) {
+        try {
+            String orderNumber = orderData.path("orderNo").asText();
+            Long orderId = orderData.path("id").asLong();
+            Long userId = orderData.path("userId").asLong();
+            
+            // 获取订单状态
+            int statusCode = orderData.path("status").asInt(0);
+            String orderStatus = getOrderStatusText(statusCode);
+            
+            // 获取订单时间
+            String orderTimeStr = orderData.path("createdAt").asText();
+            LocalDateTime orderTime;
+            try {
+                if (orderTimeStr.isEmpty()) {
+                    orderTime = LocalDateTime.now().minus(1, ChronoUnit.DAYS);
+                } else if (orderTimeStr.contains("T")) {
+                    orderTime = LocalDateTime.parse(orderTimeStr);
+                } else {
+                    // 将日期时间格式如 "2023-06-01 12:34:56" 转换为 "2023-06-01T12:34:56"
+                    orderTime = LocalDateTime.parse(orderTimeStr.replace(" ", "T"));
+                }
+            } catch (Exception e) {
+                log.warn("解析订单时间出错: {}", orderTimeStr, e);
+                orderTime = LocalDateTime.now().minus(1, ChronoUnit.DAYS);
+            }
+            
+            // 获取订单金额
+            double totalAmount = orderData.path("amount").asDouble(0.0);
+            
+            // 获取用户信息
+            com.fasterxml.jackson.databind.JsonNode userData = userDataService.getUserById(userId);
+            String userName = "用户";
+            String userPhone = "";
+            String userAddress = orderData.path("address").asText("");
+            
+            if (userData != null) {
+                userName = userData.path("username").asText("用户");
+                userPhone = userData.path("phone").asText("");
+                if (userPhone.length() > 7) {
+                    // 手机号脱敏处理
+                    userPhone = userPhone.substring(0, 3) + "****" + userPhone.substring(7);
+                }
+            }
+            
+            // 创建订单项
+            List<OrderItem> items = new ArrayList<>();
+            Long itemId = orderData.path("itemId").asLong(0);
+            int quantity = orderData.path("quantity").asInt(1);
+            
+            // 这里应该有一个服务来获取商品信息，暂时用模拟数据
+            String productName = "商品";
+            String imageUrl = "/images/product-default.jpg";
+            double price = totalAmount / quantity;
+            String productSku = "SKU-" + itemId;
+            String productCategory = "商品";
+            
+            // 根据商品ID查找不同商品
+            if (itemId == 1001 || itemId % 10 == 1) {
+                productName = "智能手表";
+                imageUrl = "/images/product-watch.jpg";
+                productCategory = "电子产品";
+            } else if (itemId == 1002 || itemId % 10 == 2) {
+                productName = "蓝牙耳机";
+                imageUrl = "/images/product-headphones.jpg";
+                productCategory = "电子产品";
+            } else if (itemId == 1003 || itemId % 10 == 3) {
+                productName = "机械键盘";
+                imageUrl = "/images/product-keyboard.jpg";
+                productCategory = "电子产品";
+            } else if (itemId == 1004 || itemId % 10 == 4) {
+                productName = "运动鞋";
+                imageUrl = "/images/product-shoes.jpg";
+                productCategory = "服装";
+            } else if (itemId == 1005 || itemId % 10 == 5) {
+                productName = "牛仔裤";
+                imageUrl = "/images/product-jeans.jpg";
+                productCategory = "服装";
+            }
+            
+            items.add(OrderItem.builder()
+                    .productName(productName)
+                    .imageUrl(imageUrl)
+                    .price(price)
+                    .quantity(quantity)
+                    .productId(itemId)
+                    .productSku(productSku)
+                    .productCategory(productCategory)
+                    .build());
+            
+            // 构建订单卡片
+            return OrderMessageCard.builder()
+                    .id(UUID.randomUUID().toString())
+                    .title("订单详情")
+                    .description("订单" + orderNumber + "状态：" + orderStatus)
+                    .iconUrl("/images/order-icon.png")
+                    .actionUrl("/order/" + orderNumber)
+                    .createdTime(LocalDateTime.now())
+                    .orderNumber(orderNumber)
+                    .orderStatus(orderStatus)
+                    .orderTime(orderTime)
+                    .totalAmount(totalAmount)
+                    .items(items)
+                    .userId(userId)
+                    .userName(userName)
+                    .userPhone(userPhone)
+                    .userAddress(userAddress)
+                    .build();
+        } catch (Exception e) {
+            log.error("从API数据创建订单卡片时出错", e);
+            return null;
         }
     }
 } 

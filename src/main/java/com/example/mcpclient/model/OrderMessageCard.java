@@ -26,6 +26,12 @@ public class OrderMessageCard extends MessageCard {
     private double totalAmount;
     private List<OrderItem> items;
     
+    // 用户信息
+    private Long userId;
+    private String userName;
+    private String userPhone;
+    private String userAddress;
+    
     @Override
     public String getType() {
         return "order";
@@ -43,5 +49,8 @@ public class OrderMessageCard extends MessageCard {
         private String imageUrl;
         private double price;
         private int quantity;
+        private Long productId;
+        private String productSku;
+        private String productCategory;
     }
 } 

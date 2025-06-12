@@ -63,24 +63,6 @@
             margin-bottom: 10px;
         }
         
-        /* 长时间思考提示样式 */
-        .thinking-notice {
-            display: none;
-            background-color: #fff3cd;
-            color: #856404;
-            padding: 10px;
-            border-radius: 5px;
-            margin: 10px 0;
-            text-align: center;
-            font-size: 14px;
-        }
-        .cancel-button {
-            margin-left: 10px;
-            color: #dc3545;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        
         /* 消息卡片样式 */
         .message-card {
             border: 1px solid #ddd;
@@ -176,10 +158,6 @@
                                 <div class="typing-indicator" style="animation-delay: 0.4s"></div>
                                 <span>AI is typing...</span>
                             </div>
-                            <!-- 长时间思考提示 -->
-                            <div id="thinkingNotice" class="thinking-notice">
-                                AI正在思考中，这可能需要一些时间... <span id="cancelButton" class="cancel-button">取消</span>
-                            </div>
                         </div>
                         <div class="input-group">
                             <input type="text" id="messageInput" class="form-control" placeholder="Type your message...">
@@ -220,12 +198,6 @@
             const domainSelector = document.getElementById('domainSelector');
             const clearButton = document.getElementById('clearButton');
             const typingIndicator = document.getElementById('typingIndicator');
-            const thinkingNotice = document.getElementById('thinkingNotice');
-            const cancelButton = document.getElementById('cancelButton');
-            
-            // 用于跟踪当前请求的变量
-            let currentController = null;
-            let thinkingTimer = null;
             
             // Load conversation history when the page loads
             loadConversationHistory();
@@ -655,21 +627,6 @@
                     // Show typing indicator
                     typingIndicator.style.display = 'flex';
                     
-                    // 清除之前的长时间思考提示计时器
-                    if (thinkingTimer) {
-                        clearTimeout(thinkingTimer);
-                    }
-                    
-                    // 5秒后显示长时间思考提示
-                    thinkingTimer = setTimeout(() => {
-                        thinkingNotice.style.display = 'block';
-                        chatContainer.scrollTop = chatContainer.scrollHeight;
-                    }, 5000);
-                    
-                    // 创建AbortController用于取消请求
-                    currentController = new AbortController();
-                    const signal = currentController.signal;
-                    
                     // Send message to server
                     fetch('/api/chat', {
                         method: 'POST',
@@ -679,20 +636,10 @@
                         body: JSON.stringify({
                             message: message,
                             domain: domain
-                        }),
-                        signal: signal
+                        })
                     })
                     .then(response => response.json())
                     .then(data => {
-                        // 清除长时间思考提示计时器
-                        if (thinkingTimer) {
-                            clearTimeout(thinkingTimer);
-                            thinkingTimer = null;
-                        }
-                        
-                        // 隐藏长时间思考提示
-                        thinkingNotice.style.display = 'none';
-                        
                         // Hide typing indicator (will be shown again during typing effect)
                         typingIndicator.style.display = 'none';
                         
@@ -707,38 +654,17 @@
                         messageInput.disabled = false;
                         sendButton.disabled = false;
                         messageInput.focus();
-                        
-                        // 清除当前控制器
-                        currentController = null;
                     })
                     .catch(error => {
-                        // 清除长时间思考提示计时器
-                        if (thinkingTimer) {
-                            clearTimeout(thinkingTimer);
-                            thinkingTimer = null;
-                        }
-                        
-                        // 隐藏长时间思考提示
-                        thinkingNotice.style.display = 'none';
-                        
                         // Hide typing indicator
                         typingIndicator.style.display = 'none';
                         
-                        // 如果不是用户取消的请求，显示错误信息
-                        if (error.name !== 'AbortError') {
-                            // Show error
-                            addMessage('Error communicating with server: ' + error, false);
-                        } else {
-                            // 用户取消的请求，显示取消信息
-                            addMessage('AI response was cancelled.', false);
-                        }
+                        // Show error
+                        addMessage('Error communicating with server: ' + error, false);
                         
                         // Re-enable input
                         messageInput.disabled = false;
                         sendButton.disabled = false;
-                        
-                        // 清除当前控制器
-                        currentController = null;
                     });
                 }
             }
@@ -753,31 +679,6 @@
             });
             
             clearButton.addEventListener('click', clearConversation);
-            
-            // 取消按钮事件监听
-            cancelButton.addEventListener('click', function() {
-                if (currentController) {
-                    // 取消当前请求
-                    currentController.abort();
-                    
-                    // 清除长时间思考提示计时器
-                    if (thinkingTimer) {
-                        clearTimeout(thinkingTimer);
-                        thinkingTimer = null;
-                    }
-                    
-                    // 隐藏长时间思考提示
-                    thinkingNotice.style.display = 'none';
-                    
-                    // 隐藏打字指示器
-                    typingIndicator.style.display = 'none';
-                    
-                    // 启用输入控件
-                    messageInput.disabled = false;
-                    sendButton.disabled = false;
-                    messageInput.focus();
-                }
-            });
         });
     </script>
 </body>

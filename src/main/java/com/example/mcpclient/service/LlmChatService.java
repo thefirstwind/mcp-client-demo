@@ -6,9 +6,6 @@ import com.example.mcpclient.model.ConversationMessage;
 import com.example.mcpclient.model.McpServiceInfo;
 import com.example.mcpclient.model.McpToolInfo;
 import com.example.mcpclient.model.MessageCard;
-import com.example.mcpclient.model.OrderMessageCard;
-import com.example.mcpclient.model.LogisticsMessageCard;
-import com.example.mcpclient.model.LogisticsTrackingCard;
 import com.example.mcpclient.service.deepseek.DeepSeekClient;
 import com.example.mcpclient.service.deepseek.DeepSeekMessage;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -59,100 +56,22 @@ public class LlmChatService {
             // Add user message to conversation history
             conversationService.addUserMessage(sessionId, request.getMessage(), request.getDomain());
             
-            // 检测消息中是否包含订单关键词
-            String userMessage = request.getMessage().toLowerCase();
-            if (userMessage.contains("订单") || userMessage.contains("快递") || userMessage.contains("物流") || userMessage.contains("包裹") || userMessage.contains("查询订单")) {
-                log.info("Detected order/logistics related query: {}", request.getMessage());
+            // 检测是否包含需要卡片展示的内容
+            MessageCard card = messageCardService.detectCardFromMessage(request.getMessage());
+            if (card != null) {
+                log.info("Detected message card from user message: {}", card.getType());
+                // 保存卡片
+                messageCardService.addCard(card);
                 
-                // 检测是单纯的订单查询还是带有物流信息的订单查询
-                boolean isOrderQuery = userMessage.contains("订单") || userMessage.contains("查询订单") || userMessage.contains("我的订单");
-                boolean isLogisticsQuery = userMessage.contains("物流") || userMessage.contains("快递") || userMessage.contains("包裹") || 
-                                         userMessage.contains("运输") || userMessage.contains("配送") || userMessage.contains("送达");
+                // 使用卡片ID创建一个特殊标记，插入到响应中
+                String cardMarkup = generateCardMarkup(card);
                 
-                StringBuilder responseBuilder = new StringBuilder();
-                boolean hasCards = false;
+                // 添加助手回复
+                String response = "我已为您创建了以下信息卡片：\n\n" + cardMarkup;
+                conversationService.addAssistantMessage(sessionId, response, request.getDomain());
                 
-                // 如果是订单查询，创建订单卡片
-                if (isOrderQuery) {
-                    MessageCard orderCard = messageCardService.createOrderCardFromMessage(request.getMessage());
-                    if (orderCard != null) {
-                        log.info("Created order card from user message");
-                        messageCardService.addCard(orderCard);
-                        String orderCardMarkup = generateCardMarkup(orderCard);
-                        responseBuilder.append("以下是您查询的订单信息：\n\n").append(orderCardMarkup);
-                        hasCards = true;
-                        
-                        // 如果同时也查询物流，并且订单状态是已发货，添加物流卡片
-                        if (isLogisticsQuery || "已发货".equals(((OrderMessageCard)orderCard).getOrderStatus())) {
-                            MessageCard logisticsCard = null;
-                            
-                            // 根据查询中是否包含追踪详情关键词决定创建哪种物流卡片
-                            if (userMessage.contains("追踪") || userMessage.contains("详情") || userMessage.contains("跟踪")) {
-                                logisticsCard = messageCardService.createTrackingCardFromMessage(request.getMessage());
-                            } else {
-                                logisticsCard = messageCardService.createLogisticsCardFromMessage(request.getMessage());
-                            }
-                            
-                            if (logisticsCard != null) {
-                                log.info("Created logistics card to accompany order card");
-                                messageCardService.addCard(logisticsCard);
-                                String logisticsCardMarkup = generateCardMarkup(logisticsCard);
-                                responseBuilder.append("\n\n该订单的物流信息：\n\n").append(logisticsCardMarkup);
-                            } else {
-                                // 明确告知用户无物流信息
-                                responseBuilder.append("\n\n抱歉，未能查询到该订单的物流信息。可能是该订单尚未发货，或物流信息尚未更新。");
-                            }
-                        }
-                    } else {
-                        // 明确告知用户未找到订单信息
-                        String response = "抱歉，未能查询到您要找的订单信息。请确认订单号是否正确，或尝试提供更多订单详情。";
-                        conversationService.addAssistantMessage(sessionId, response, request.getDomain());
-                        return new ChatResponse(response);
-                    }
-                } 
-                // 如果只是物流查询，创建相应的物流卡片
-                else if (isLogisticsQuery) {
-                    MessageCard logisticsCard = null;
-                    if (userMessage.contains("追踪") || userMessage.contains("详情") || userMessage.contains("跟踪")) {
-                        logisticsCard = messageCardService.createTrackingCardFromMessage(request.getMessage());
-                        if (logisticsCard != null) {
-                            log.info("Created tracking card from user message");
-                            messageCardService.addCard(logisticsCard);
-                            String trackingCardMarkup = generateCardMarkup(logisticsCard);
-                            responseBuilder.append("以下是您查询的物流追踪详情：\n\n").append(trackingCardMarkup);
-                            hasCards = true;
-                        } else {
-                            // 明确告知用户未找到物流追踪信息
-                            String response = "抱歉，未能查询到您要找的物流追踪信息。请确认物流单号是否正确，或尝试提供更多物流详情。";
-                            conversationService.addAssistantMessage(sessionId, response, request.getDomain());
-                            return new ChatResponse(response);
-                        }
-                    } else {
-                        logisticsCard = messageCardService.createLogisticsCardFromMessage(request.getMessage());
-                        if (logisticsCard != null) {
-                            log.info("Created logistics card from user message");
-                            messageCardService.addCard(logisticsCard);
-                            String logisticsCardMarkup = generateCardMarkup(logisticsCard);
-                            responseBuilder.append("以下是您查询的物流信息：\n\n").append(logisticsCardMarkup);
-                            hasCards = true;
-                        } else {
-                            // 明确告知用户未找到物流信息
-                            String response = "抱歉，未能查询到您要找的物流信息。请确认物流单号是否正确，或尝试提供更多物流详情。";
-                            conversationService.addAssistantMessage(sessionId, response, request.getDomain());
-                            return new ChatResponse(response);
-                        }
-                    }
-                }
-                
-                // 如果成功创建了任何卡片，返回响应
-                if (hasCards) {
-                    String response = responseBuilder.toString();
-                    conversationService.addAssistantMessage(sessionId, response, request.getDomain());
-                    return new ChatResponse(response);
-                }
+                return new ChatResponse(response);
             }
-            
-            // 如果不是订单/物流查询或无法创建卡片，走正常的LLM处理流程
             
             // Get conversation history
             List<ConversationMessage> history = conversationService.getConversationHistory(sessionId);
