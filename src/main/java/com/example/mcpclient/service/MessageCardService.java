@@ -254,10 +254,7 @@ public class MessageCardService {
         message = message.toLowerCase();
         
         // 检测订单信息
-        if (message.contains("订单") && (message.contains("已发货") || message.contains("待付款") || message.contains("已付款"))) {
-            return createOrderCardFromMessage(message);
-        }
-        
+
         // 检测物流信息
         if (message.contains("物流") || message.contains("快递") || message.contains("包裹")) {
             if (message.contains("追踪") || message.contains("详情") || message.contains("跟踪")) {
@@ -266,10 +263,9 @@ public class MessageCardService {
                 return createLogisticsCardFromMessage(message);
             }
         }
-        
-        return null;
+        return createOrderCardFromMessage(message);
     }
-    
+
     /**
      * 从消息文本创建订单卡片
      */
@@ -285,10 +281,10 @@ public class MessageCardService {
             orderNumber = matcher.group(2);
             specificOrderRequested = true;
             
-            // 如果提取的订单号不以OD开头，添加前缀
-            if (!orderNumber.toUpperCase().startsWith("OD")) {
-                orderNumber = "OD" + orderNumber;
-            }
+//            // 如果提取的订单号不以OD开头，添加前缀
+//            if (!orderNumber.toUpperCase().startsWith("OD")) {
+//                orderNumber = "OD" + orderNumber;
+//            }
             
             // 尝试从MCP服务获取订单信息
             com.fasterxml.jackson.databind.JsonNode orderData = orderDataService.getOrderByOrderNo(orderNumber);
@@ -305,8 +301,9 @@ public class MessageCardService {
                 return null;
             }
         } else {
-            // 如果没有指定订单号，生成一个随机订单号
-            orderNumber = "OD" + System.currentTimeMillis();
+            return null;
+//            // 如果没有指定订单号，生成一个随机订单号
+//            orderNumber = "OD" + System.currentTimeMillis();
         }
         
         // 检查消息中是否明确要求查询不存在的订单
